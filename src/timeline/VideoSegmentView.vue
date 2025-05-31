@@ -1,28 +1,43 @@
 <template>
   <div
     v-if="timeline?.getActiveVideoSegment()"
-    class="flex flex-col bg-zinc-700 p-6 h-full w-full mx-auto">
+    class="flex flex-col items-center bg-zinc-700 p-6 h-full w-full mx-auto">
     <div
-      class="flex flex-row w-full h-full"
-      :class="isActiveComment ? 'gap-6' : 'gap-0'">
+      class="flex flex-row items-start w-full h-full gap-6"
+      :class="{ 'gap-0': timeline?.getActiveVideoComment() }">
       <div
-        class="transition-all duration-500 ease-in-out"
+        class="relative flex-1 aspect-video rounded-lg bg-black overflow-hidden mb-4 transition-all duration-500 ease-in-out"
         :class="isActiveComment ? 'flex-50' : 'flex-100'">
-        <div
-          ref="youtubePlayer"
-          class=" bg-black aspect-video rounded-lg relative overflow-hidden mb-4 "></div>
+        <div ref="youtubePlayer" class="w-full h-full"></div>
+        <button
+          v-if="!isEditing"
+          class="absolute top-4 right-6 px-3 py-1 rounded bg-blue-700 hover:bg-blue-600 text-white text-sm font-semibold transition z-10"
+          @click="startEdit"
+          data-testid="inline-edit-btn"
+        >Edit</button>
+        <div v-if="isEditing" class="absolute top-16 right-6 bg-zinc-800 p-4 rounded-lg border border-zinc-600 shadow-lg z-20 w-80 flex flex-col gap-3">
+          <label class="text-zinc-300 font-semibold">Title</label>
+          <input v-model="editTitle" class="w-full rounded bg-zinc-900 text-zinc-100 p-2 border border-zinc-700" />
+          <label class="text-zinc-300 font-semibold">Start At (seconds)</label>
+          <input v-model.number="editStartAt" type="number" min="0" class="w-full rounded bg-zinc-900 text-zinc-100 p-2 border border-zinc-700" />
+          <label class="text-zinc-300 font-semibold">End At (seconds)</label>
+          <input v-model.number="editEndAt" type="number" min="0" class="w-full rounded bg-zinc-900 text-zinc-100 p-2 border border-zinc-700" />
+          <div class="flex gap-2 mt-2">
+            <button @click="saveEdit" class="px-4 py-2 rounded bg-blue-700 hover:bg-blue-600 text-white font-semibold transition">Save</button>
+            <button @click="cancelEdit" class="px-4 py-2 rounded bg-zinc-700 hover:bg-zinc-600 text-white font-semibold transition">Cancel</button>
+          </div>
+        </div>
       </div>
-
       <Transition
-        enter-active-class="transition-all duration-500 ease-in-out"
-        enter-from-class="opacity-0 translate-x-full"
+        enter-active-class="transition-all duration-700 ease-in-out"
+        enter-from-class="opacity-0 translate-x-16"
         enter-to-class="opacity-100 translate-x-0"
-        leave-active-class="transition-all duration-500 ease-in-out"
+        leave-active-class="transition-all duration-700 ease-in-out"
         leave-from-class="opacity-100 translate-x-0"
-        leave-to-class="opacity-0 translate-x-full"
+        leave-to-class="opacity-0 translate-x-16"
         mode="out-in"
       >
-        <div class="h-full flex-50" v-if="isActiveComment">
+        <div class="flex-1 h-full" v-if="isActiveComment">
           <VideoCommentView />
         </div>
       </Transition>
@@ -31,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick, inject } from 'vue';
+import { ref, watch, onMounted, onUnmounted, nextTick, inject, computed } from 'vue';
 import { useTimelineStore } from '@/timeline/stores/timelineStore';
 import { storeToRefs } from 'pinia';
 import type { Logger } from '../types/logger';
@@ -44,6 +59,34 @@ const youtubePlayer = ref<HTMLElement | null>(null);
 let player: YT.Player | null = null;
 const emit = defineEmits(['segment-complete']);
 const isActiveComment = ref(false);
+
+// Inline edit state
+const isEditing = ref(false);
+const editTitle = ref('');
+const editStartAt = ref(0);
+const editEndAt = ref(0);
+
+const activeVideoSegment = computed(() => timeline.value?.getActiveVideoSegment() ?? null);
+
+function startEdit() {
+  if (!activeVideoSegment.value) return;
+  editTitle.value = activeVideoSegment.value.title;
+  editStartAt.value = activeVideoSegment.value.startAt;
+  editEndAt.value = activeVideoSegment.value.endAt;
+  isEditing.value = true;
+}
+
+function cancelEdit() {
+  isEditing.value = false;
+}
+
+function saveEdit() {
+  if (!activeVideoSegment.value) return;
+  activeVideoSegment.value.title = editTitle.value;
+  activeVideoSegment.value.startAt = editStartAt.value;
+  activeVideoSegment.value.endAt = editEndAt.value;
+  isEditing.value = false;
+}
 
 function completeSegment() {
   emit('segment-complete');
@@ -164,10 +207,9 @@ watch(
   },
 );
 
-
 watch(
   () => timeline.value?.getActiveVideoComment(),
-  (newComment, oldComment) => {
+  (newComment) => {
     isActiveComment.value = !!newComment;
   },
 );
